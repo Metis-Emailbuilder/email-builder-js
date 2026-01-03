@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  AppBar,
+  Avatar,
   Box,
   Button,
   Card,
@@ -13,6 +15,7 @@ import {
   Grid,
   Stack,
   TextField,
+  Toolbar,
   Typography,
   IconButton,
   Menu,
@@ -23,7 +26,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AddIcon from '@mui/icons-material/Add';
-import { onAuthStateChanged } from 'firebase/auth';
+import LogoutIcon from '@mui/icons-material/Logout';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { Template, getUserTemplates, deleteTemplate, saveTemplate, updateTemplate } from '../services/templateService';
 import EMPTY_EMAIL_MESSAGE from '../getConfiguration/sample/empty-email-message';
@@ -45,31 +49,17 @@ export function Dashboard({ onTemplateSelect, onCreateNew }: DashboardProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        fetchTemplates();
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const fetchTemplates = async () => {
+  const fetchTemplates = async (userId: string) => {
     try {
       setLoading(true);
       setError(null);
-      if (user) {
-        const userTemplates = await getUserTemplates(user.uid);
-        // Sort by lastModified descending
-        userTemplates.sort(
-          (a, b) =>
-            new Date(b.lastModified as any).getTime() -
-            new Date(a.lastModified as any).getTime()
-        );
-        setTemplates(userTemplates);
-      }
+      const userTemplates = await getUserTemplates(userId);
+      userTemplates.sort(
+        (a, b) =>
+          new Date(b.lastModified as any).getTime() -
+          new Date(a.lastModified as any).getTime()
+      );
+      setTemplates(userTemplates);
     } catch (err) {
       setError('Failed to load templates');
       console.error(err);
@@ -77,6 +67,19 @@ export function Dashboard({ onTemplateSelect, onCreateNew }: DashboardProps) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        fetchTemplates(currentUser.uid);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleCreateNew = async () => {
     if (!newTemplateName.trim() || !user) return;
@@ -138,6 +141,14 @@ export function Dashboard({ onTemplateSelect, onCreateNew }: DashboardProps) {
     setAnchorEl(null);
   };
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
   if (loading) {
     return (
       <Container>
@@ -149,20 +160,44 @@ export function Dashboard({ onTemplateSelect, onCreateNew }: DashboardProps) {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Stack spacing={3}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Typography variant="h4" component="h1">
-            My Templates
+    <>
+      <AppBar position="fixed">
+        <Toolbar>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Email Builder
           </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setOpenDialog(true)}
-          >
-            New Template
-          </Button>
-        </Stack>
+          {user && (
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Avatar
+                src={user.photoURL || ''}
+                alt={user.displayName || 'User'}
+                sx={{ width: 32, height: 32 }}
+              >
+                {!user.photoURL && (user.displayName || user.email)?.charAt(0).toUpperCase()}
+              </Avatar>
+              <Typography variant="body2">{user.displayName || user.email}</Typography>
+              <Button color="inherit" startIcon={<LogoutIcon />} onClick={handleLogout}>
+                Logout
+              </Button>
+            </Stack>
+          )}
+        </Toolbar>
+      </AppBar>
+
+      <Container maxWidth="lg" sx={{ py: 4, mt: 8 }}>
+        <Stack spacing={3}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Typography variant="h4" component="h1">
+              My Templates
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setOpenDialog(true)}
+            >
+              New Template
+            </Button>
+          </Stack>
 
         {error && <Alert severity="error">{error}</Alert>}
 
@@ -226,7 +261,7 @@ export function Dashboard({ onTemplateSelect, onCreateNew }: DashboardProps) {
       {/* Create New Template Dialog */}
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Create New Template</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
+        <DialogContent>
           <TextField
             fullWidth
             label="Template Name"
@@ -234,6 +269,8 @@ export function Dashboard({ onTemplateSelect, onCreateNew }: DashboardProps) {
             onChange={(e) => setNewTemplateName(e.target.value)}
             placeholder="e.g., Welcome Email"
             autoFocus
+            margin="dense"
+            sx={{ mt: 2 }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 handleCreateNew();
@@ -284,7 +321,7 @@ export function Dashboard({ onTemplateSelect, onCreateNew }: DashboardProps) {
       {/* Rename Template Dialog */}
       <Dialog open={openRenameDialog} onClose={() => setOpenRenameDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Rename Template</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
+        <DialogContent>
           <TextField
             fullWidth
             label="Template Name"
@@ -292,6 +329,8 @@ export function Dashboard({ onTemplateSelect, onCreateNew }: DashboardProps) {
             onChange={(e) => setRenameTemplateName(e.target.value)}
             placeholder="Enter new template name"
             autoFocus
+            margin="dense"
+            sx={{ mt: 2 }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 handleRename();
@@ -311,5 +350,6 @@ export function Dashboard({ onTemplateSelect, onCreateNew }: DashboardProps) {
         </DialogActions>
       </Dialog>
     </Container>
+    </>
   );
 }

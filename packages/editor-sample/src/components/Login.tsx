@@ -1,3 +1,4 @@
+import React from 'react';
 import { Button, Container, Stack, Typography } from '@mui/material';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '../config/firebase';
